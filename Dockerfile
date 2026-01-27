@@ -4,18 +4,20 @@ WORKDIR /app
 
 # Installa dipendenze di sistema
 RUN apt-get update && apt-get install -y \
-    git \
     gcc \
     g++ \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone il repo da GitHub (sempre fresco)
-RUN git clone https://github.com/rcapoccia/skinai-cami.git . && \
-    git checkout HEAD
+# Copia requirements
+COPY requirements.txt .
 
 # Installa dipendenze Python
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copia codice
+COPY app.py .
+COPY models/ models/
 
 # Esponi porta 9000
 EXPOSE 9000
