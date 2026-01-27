@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia codice
 COPY app.py .
-COPY models/ models/
+COPY models/ models/ || true
 
 # Esponi porta 9000
 EXPOSE 9000
