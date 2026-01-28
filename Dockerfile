@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia codice
 COPY app.py .
 
-# Esponi porta 9000
-EXPOSE 9000
+# Esponi porta 8000
+EXPOSE 8000
 
 # Avvia app
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
