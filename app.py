@@ -30,7 +30,11 @@ app = FastAPI(
 )
 
 # CORS - Configurare per Vercel
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "*")
+if ALLOWED_ORIGINS_ENV == "*":
+    ALLOWED_ORIGINS = ["*"]
+else:
+    ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
