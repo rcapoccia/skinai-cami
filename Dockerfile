@@ -18,4 +18,5 @@ COPY . .
 EXPOSE 8080
 
 # Shell form so $PORT expands; Railway injects PORT=8080 at runtime
+# Force rebuild: 2026-02-05 17:31
 CMD uvicorn app:app --host 0.0.0.0 --port 8080 --log-level info
