@@ -1,2 +1,0 @@
-# Dependencies installed via Dockerfile
-# This file is kept for compatibility
