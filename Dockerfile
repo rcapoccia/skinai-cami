@@ -27,6 +27,9 @@ COPY --from=builder /root/.local /root/.local
 COPY . .
 
 ENV PATH=/root/.local/bin:$PATH
+ENV PORT=8080
+
 EXPOSE 8080
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
+# Use sh -c to expand $PORT variable at runtime
+CMD sh -c "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info"
