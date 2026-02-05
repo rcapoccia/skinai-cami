@@ -1,6 +1,2 @@
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-pillow
-numpy
-python-multipart
-tf-lite==2.14.0
+# Dependencies installed via Dockerfile
+# This file is kept for compatibility
