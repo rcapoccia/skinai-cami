@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from tensorflow.keras.models import load_model
+import tensorflow as tf
 from PIL import Image
 import numpy as np
 import io
@@ -18,50 +18,67 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load model at startup
+# Load TFLite model at startup
+interpreter = None
+input_details = None
+output_details = None
+
 try:
-    # Try to load the global model (ensemble)
-    model_path = "skinai_global_final.h5"
+    # Load TFLite model
+    model_path = "skinai_ensemble_final.tflite"
     if not os.path.exists(model_path):
-        # Fallback to any available H5 model
-        h5_files = [f for f in os.listdir(".") if f.endswith(".h5")]
-        if h5_files:
-            model_path = h5_files[0]
-            print(f"Using model: {model_path}")
-        else:
-            raise FileNotFoundError("No H5 model found in directory")
+        raise FileNotFoundError(f"Model not found: {model_path}")
     
-    model = load_model(model_path)
-    print(f"✅ Model loaded successfully: {model_path}")
+    interpreter = tf.lite.Interpreter(model_path=model_path)
+    interpreter.allocate_tensors()
+    
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    
+    print(f"✅ TFLite model loaded successfully: {model_path}")
+    print(f"   Input shape: {input_details[0]['shape']}")
+    print(f"   Output shape: {output_details[0]['shape']}")
 except Exception as e:
-    print(f"❌ Error loading model: {e}")
-    model = None
+    print(f"❌ Error loading TFLite model: {e}")
+    interpreter = None
 
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
-        "model_loaded": model is not None,
+        "model_loaded": interpreter is not None,
+        "model_type": "TFLite",
         "service": "SkinGlow AI Backend"
     }
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
     try:
+        if interpreter is None:
+            return {
+                "status": "error",
+                "message": "Model not loaded"
+            }
+        
         # Read and process image
         img_data = await file.read()
         img = Image.open(io.BytesIO(img_data)).convert("RGB")
         img = img.resize((224, 224))
         
-        # Normalize
+        # Normalize to match model input
         arr = np.array(img, dtype=np.float32) / 255.0
         arr = np.expand_dims(arr, 0)
         
-        # Predict
-        predictions = model.predict(arr, verbose=0)
+        # Run TFLite inference
+        interpreter.set_tensor(input_details[0]['index'], arr)
+        interpreter.invoke()
+        
+        # Get output
+        output_data = interpreter.get_tensor(output_details[0]['index'])
+        predictions = output_data[0] if len(output_data.shape) > 1 else output_data
         
         # Extract scores (assuming 7 outputs)
-        scores = predictions[0].tolist() if len(predictions.shape) > 1 else predictions.tolist()
+        scores = predictions.tolist() if isinstance(predictions, np.ndarray) else list(predictions)
         
         # Ensure we have 7 values
         while len(scores) < 7:
