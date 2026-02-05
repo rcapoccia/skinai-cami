@@ -32,4 +32,5 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Use sh -c to expand $PORT variable at runtime
+# Force rebuild: v2
 CMD sh -c "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080} --log-level info"
