@@ -1,13 +1,10 @@
-FROM python:3.11-slim
+FROM tensorflow/tensorflow:2.16.1
 
 WORKDIR /app
 
-# Install system dependencies
+# Install additional dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libopenblas-dev \
-    liblapack-dev \
-    libgomp1 \
+    python3-pip \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

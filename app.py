@@ -7,13 +7,8 @@ import gc
 import os
 
 # Import TensorFlow
-try:
-    import tensorflow as tf
-    from tensorflow.keras.models import load_model
-    TF_AVAILABLE = True
-except ImportError:
-    TF_AVAILABLE = False
-    print("⚠️ TensorFlow not available")
+import tensorflow as tf
+from tensorflow.keras.models import load_model
 
 app = FastAPI(title="SkinGlow AI Backend")
 
@@ -29,22 +24,19 @@ app.add_middleware(
 # Load H5 model at startup
 model = None
 
-if TF_AVAILABLE:
-    try:
-        model_path = "skinai_global_final.h5"
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model not found: {model_path}")
-        
-        # Load Keras H5 model
-        model = load_model(model_path)
-        print(f"✅ H5 model loaded successfully: {model_path}")
-        print(f"   Input shape: {model.input_shape}")
-        print(f"   Output shape: {model.output_shape}")
-    except Exception as e:
-        print(f"❌ Error loading H5 model: {e}")
-        model = None
-else:
-    print("❌ TensorFlow not available")
+try:
+    model_path = "skinai_global_final.h5"
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model not found: {model_path}")
+    
+    # Load Keras H5 model
+    model = load_model(model_path)
+    print(f"✅ H5 model loaded successfully: {model_path}")
+    print(f"   Input shape: {model.input_shape}")
+    print(f"   Output shape: {model.output_shape}")
+except Exception as e:
+    print(f"❌ Error loading H5 model: {e}")
+    model = None
 
 @app.get("/health")
 async def health():
@@ -52,7 +44,8 @@ async def health():
         "status": "ok",
         "model_loaded": model is not None,
         "model_type": "H5 (Keras)",
-        "service": "SkinGlow AI Backend"
+        "service": "SkinGlow AI Backend",
+        "tensorflow_version": tf.__version__
     }
 
 @app.post("/analyze")
