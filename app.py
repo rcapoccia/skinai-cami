@@ -5,10 +5,7 @@ import numpy as np
 import io
 import gc
 import os
-
-# Import TensorFlow
-import tensorflow as tf
-from tensorflow.keras.models import load_model
+import onnxruntime as ort
 
 app = FastAPI(title="SkinGlow AI Backend")
 
@@ -21,37 +18,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load H5 model at startup
-model = None
+# Load ONNX model at startup
+session = None
 
 try:
-    model_path = "skinai_global_final.h5"
+    model_path = "skin_analyzer.onnx"
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model not found: {model_path}")
     
-    # Load Keras H5 model
-    model = load_model(model_path)
-    print(f"✅ H5 model loaded successfully: {model_path}")
-    print(f"   Input shape: {model.input_shape}")
-    print(f"   Output shape: {model.output_shape}")
+    session = ort.InferenceSession(model_path)
+    print(f"✅ ONNX model loaded successfully: {model_path}")
+    print(f"   Input name: {session.get_inputs()[0].name}")
+    print(f"   Output names: {[o.name for o in session.get_outputs()]}")
 except Exception as e:
-    print(f"❌ Error loading H5 model: {e}")
-    model = None
+    print(f"❌ Error loading ONNX model: {e}")
+    session = None
 
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
-        "model_loaded": model is not None,
-        "model_type": "H5 (Keras)",
-        "service": "SkinGlow AI Backend",
-        "tensorflow_version": tf.__version__
+        "model_loaded": session is not None,
+        "model_type": "ONNX",
+        "service": "SkinGlow AI Backend"
     }
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
     try:
-        if model is None:
+        if session is None:
             return {
                 "status": "error",
                 "message": "Model not loaded"
@@ -64,14 +59,17 @@ async def analyze(file: UploadFile = File(...)):
         
         # Normalize to match model input (0-1 float32)
         arr = np.array(img, dtype=np.float32) / 255.0
+        # Transpose to CHW format (ONNX expects C, H, W)
+        arr = np.transpose(arr, (2, 0, 1))
         # Add batch dimension
         arr = np.expand_dims(arr, 0)
         
-        # Run inference
-        predictions = model.predict(arr, verbose=0)
+        # Run ONNX inference
+        input_name = session.get_inputs()[0].name
+        output = session.run(None, {input_name: arr})
         
-        # Get first batch predictions
-        scores = predictions[0]
+        # Get predictions (6 values: wrinkles, pores, spots, dark_circles, dehydration, acne)
+        predictions = output[0][0]  # Shape: (6,)
         
         # Cleanup
         gc.collect()
@@ -79,13 +77,12 @@ async def analyze(file: UploadFile = File(...)):
         return {
             "status": "success",
             "scores": {
-                "rughe": float(scores[0]),
-                "pori": float(scores[1]),
-                "macchie": float(scores[2]),
-                "occhiaie": float(scores[3]),
-                "glow": float(scores[4]),
-                "acne": float(scores[5]),
-                "pelle_pulita_percent": float(scores[6]) if len(scores) > 6 else 0.0
+                "rughe": float(predictions[0]),
+                "pori": float(predictions[1]),
+                "macchie": float(predictions[2]),
+                "occhiaie": float(predictions[3]),
+                "disidratazione": float(predictions[4]),
+                "acne": float(predictions[5])
             }
         }
     except Exception as e:
