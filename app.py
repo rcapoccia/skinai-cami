@@ -1,11 +1,19 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-import tensorflow as tf
 from PIL import Image
 import numpy as np
 import io
 import gc
 import os
+
+# Import TensorFlow
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import load_model
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
+    print("⚠️ TensorFlow not available")
 
 app = FastAPI(title="SkinGlow AI Backend")
 
@@ -18,43 +26,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load TFLite model at startup
-interpreter = None
-input_details = None
-output_details = None
+# Load H5 model at startup
+model = None
 
-try:
-    # Load TFLite model
-    model_path = "skinai_ensemble_final.tflite"
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found: {model_path}")
-    
-    interpreter = tf.lite.Interpreter(model_path=model_path)
-    interpreter.allocate_tensors()
-    
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    
-    print(f"✅ TFLite model loaded successfully: {model_path}")
-    print(f"   Input shape: {input_details[0]['shape']}")
-    print(f"   Output shape: {output_details[0]['shape']}")
-except Exception as e:
-    print(f"❌ Error loading TFLite model: {e}")
-    interpreter = None
+if TF_AVAILABLE:
+    try:
+        model_path = "skinai_global_final.h5"
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model not found: {model_path}")
+        
+        # Load Keras H5 model
+        model = load_model(model_path)
+        print(f"✅ H5 model loaded successfully: {model_path}")
+        print(f"   Input shape: {model.input_shape}")
+        print(f"   Output shape: {model.output_shape}")
+    except Exception as e:
+        print(f"❌ Error loading H5 model: {e}")
+        model = None
+else:
+    print("❌ TensorFlow not available")
 
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
-        "model_loaded": interpreter is not None,
-        "model_type": "TFLite",
+        "model_loaded": model is not None,
+        "model_type": "H5 (Keras)",
         "service": "SkinGlow AI Backend"
     }
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
     try:
-        if interpreter is None:
+        if model is None:
             return {
                 "status": "error",
                 "message": "Model not loaded"
@@ -65,25 +69,16 @@ async def analyze(file: UploadFile = File(...)):
         img = Image.open(io.BytesIO(img_data)).convert("RGB")
         img = img.resize((224, 224))
         
-        # Normalize to match model input
+        # Normalize to match model input (0-1 float32)
         arr = np.array(img, dtype=np.float32) / 255.0
+        # Add batch dimension
         arr = np.expand_dims(arr, 0)
         
-        # Run TFLite inference
-        interpreter.set_tensor(input_details[0]['index'], arr)
-        interpreter.invoke()
+        # Run inference
+        predictions = model.predict(arr, verbose=0)
         
-        # Get output
-        output_data = interpreter.get_tensor(output_details[0]['index'])
-        predictions = output_data[0] if len(output_data.shape) > 1 else output_data
-        
-        # Extract scores (assuming 7 outputs)
-        scores = predictions.tolist() if isinstance(predictions, np.ndarray) else list(predictions)
-        
-        # Ensure we have 7 values
-        while len(scores) < 7:
-            scores.append(0.0)
-        scores = scores[:7]
+        # Get first batch predictions
+        scores = predictions[0]
         
         # Cleanup
         gc.collect()
@@ -91,13 +86,13 @@ async def analyze(file: UploadFile = File(...)):
         return {
             "status": "success",
             "scores": {
-                "rughe": float(scores[0] * 10),
-                "pori": float(scores[1] * 10),
-                "macchie": float(scores[2] * 10),
-                "occhiaie": float(scores[3] * 10),
-                "glow": float(scores[4] * 10),
-                "acne": float(scores[5] * 10),
-                "pelle_pulita_percent": float(scores[6] * 100)
+                "rughe": float(scores[0]),
+                "pori": float(scores[1]),
+                "macchie": float(scores[2]),
+                "occhiaie": float(scores[3]),
+                "glow": float(scores[4]),
+                "acne": float(scores[5]),
+                "pelle_pulita_percent": float(scores[6]) if len(scores) > 6 else 0.0
             }
         }
     except Exception as e:
